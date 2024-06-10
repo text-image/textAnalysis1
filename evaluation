@@ -1,0 +1,8 @@
+# EVALUATION
+print(np.mean(prediction == twenty_test.target))
+
+# best_score_ and best_params_ store the best mean score and the parameters setting
+print(gs_clf.best_score_)
+
+for param in sorted(parameters.keys()):
+    print("%s: %r" % (param, gs_clf.best_params_[param]))
