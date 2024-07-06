@@ -1,0 +1,27 @@
+import openpyxl
+import pandas as pd
+
+workbook = openpyxl.Workbook()
+sheet = workbook.active
+# Add data to the Excel sheet
+data = [
+    ["Accuracy score with TfidfTransformer", "Accuracy score with CountVectorizer", "t-statistic", "p-value"],
+    [accurate_idf, accurate_count, t_statistic, p_value]
+]
+for row in data:
+    sheet.append(row)
+workbook.save("sheet.xlsx")
+print("Excel file is created.")
+
+# New data to append
+new_data = {'Name': ['Bob'], 'Age': [28], 'Salary': [55000]}
+df_new = pd.DataFrame(new_data)
+
+# Read existing data
+df_existing = pd.read_excel(existing_file)
+
+# Append new data
+df_combined = df_existing.append(df_new, ignore_index=True)
+
+# Save the combined data to Excel
+df_combined.to_excel(existing_file, index=False)

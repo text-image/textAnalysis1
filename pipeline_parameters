@@ -1,18 +1,17 @@
-the Pipeline object takes two parameters: X (the input data) and y (the target labels). Here's a breakdown of the
-parameters in the context of your code:
+the Pipeline object takes two parameters: X (the input data) and y (the target labels).
 
 Parameters:
 
 X (Input Data):
 
-In your code, this is twenty_train.data.
+This is twenty_train.data.
 Type: List of strings (documents).
 Description: These are the raw text documents from the 20 Newsgroups dataset. The Pipeline will process these documents
 through the various steps defined in the pipeline.
 
 y (Target Labels):
 
-In your code, this is twenty_train.target.
+This is twenty_train.target.
 Type: Array of integers.
 Description: These are the category labels corresponding to each document in X. Each label is an integer that represents
  one of the categories defined in the target_names list.
@@ -29,6 +28,7 @@ twenty_train.target (y):
 This is the array of target labels that correspond to the text documents.
 These labels will be used to train the MultinomialNB classifier on the features extracted by the previous steps
 (CountVectorizer and TfidfTransformer).
+
 Steps in the fit Method
 
 CountVectorizer (vect step):
