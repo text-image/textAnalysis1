@@ -3,7 +3,11 @@ from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
 from sklearn.linear_model import SGDClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score
-from scipy.stats import ttest_rel
+from sklearn.decomposition import PCA
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
+import pandas as pd
+from scipy.stats import f_oneway
+from statsmodels.stats.multicomp import MultiComparison
 
 # LOAD DATA
 # categories = ["alt.atheism", "soc.religion.christian", "comp.graphics", "sci.med"]
@@ -34,29 +38,42 @@ text_clf_count = Pipeline([
 text_clf_idf.fit(twenty_train.data, twenty_train.target)
 text_clf_count.fit(twenty_train.data, twenty_train.target)
 
-# Prevent division by zero
-epsilon = 1e-10
+# PCA and LDA
+pca = PCA(n_components=2)
+twenty_pca = pca.fit_transform(twenty_train.data)
+
+lda = LDA(n_components=2)
+twenty_lda = lda.fit_transform(twenty_train.data, twenty_train.target)
+
 prediction_idf = text_clf_idf.predict(twenty_test.data)
 prediction_count = text_clf_count.predict(twenty_test.data)
+idf_pca = text_clf_idf.predict(twenty_pca)
+idf_lda = text_clf_idf.predict(twenty_lda)
+count_pca = text_clf_count.predict(twenty_pca)
+count_lda = text_clf_count.predict(twenty_lda)
 
 print(f"Prediction of Tfidf: {prediction_idf}")
 print(f"Prediction of CountVectorizer: {prediction_count}")
-
-
-def safe_accuracy_score(y_true, y_predict):
-    try:
-        return accuracy_score(y_true, y_predict)
-    except ZeroDivisionError:
-        return 0.0
-
+print(f"Prediction of Tfidf compressed by PCA: {idf_pca}")
+print(f"Prediction of Tfidf compressed by LDA: {idf_lda}")
+print(f"Prediction of CountVectorizer compressed by PCA: {count_pca}")
+print(f"Prediction of CountVectorizer compressed by LDA: {count_lda}")
 
 # EVALUATION
 accurate_idf = accuracy_score(twenty_test.target, prediction_idf)
 accurate_count = accuracy_score(twenty_test.target, prediction_count)
+accurate_idf_pca = accuracy_score(twenty_test.target, idf_pca)
+accurate_idf_lda = accuracy_score(twenty_test.target, idf_lda)
+accurate_count_pca = accuracy_score(twenty_test.target, count_pca)
+accurate_count_lda = accuracy_score(twenty_test.target, count_lda)
 
 print(f"Accuracy score with TfidfTransformer: {accurate_idf: .4f}")
 print(f"Accuracy score with CountVectorizer: {accurate_count: .4f}")
-
+print(f"Accuracy score with compressed by PCA: {accurate_idf_pca: .4f}")
+print(f"Accuracy score with compressed by LDA: {accurate_idf_lda: .4f}")
+print(f"Accuracy score with CountVectorizer compressed by PCA: {accurate_count_pca: .4f}")
+print(f"Accuracy score with CountVectorizer compressed by LDA: {accurate_count_lda: .4f}")
+'''
 # PAIRED T-TEST
 
 
@@ -66,17 +83,27 @@ def safe_t_test_rel(data1, data2):
         return t_stat, p_val
     except ValueError as e:
         print(f"Error performing t-test: {e}")
+'''
+predictions = [prediction_idf, prediction_count, idf_pca, idf_lda, count_pca, count_lda]
+data = []
+for i, j in enumerate(predictions):
+    for i_text, predict in enumerate(j):
+        data.append([i_text, predict, f"Model_{i+1}"])
+        print(data)
+# data = [[0, 17, 'Model_1'], [1, 8, 'Model_1'], ...], i=model index, j= predictions of a model
 
+# DATA FRAME
+df = pd.DataFrame(data, columns=["Sample", "Prediction", "Model"])
 
-t_statistic, p_value = safe_t_test_rel(prediction_idf, prediction_count)
-print(f"t-stat: {t_statistic: .4f}\np-val: {p_value: .4f}")
+# ANOVA
+# unpack list=> f_oneway(*(groups)) = f_oneway(group1, group2, ...)
+f_stats, p_value = f_oneway(*(df[df["Model"] == f"Model_{i+1}"]["Prediction"] for i in range(len(predictions))))
+print(f"ANOVA F-statistic: {f_stats:.4f}, p-value: {p_value:.4f}")
+
 # INTERPRETATION
-alpha_value = 0.05
-if p_value < alpha_value:
-    print("Models are significantly different", end=" ")
-    if accurate_count < accurate_idf:
-        print("and the model with TfidfTransformer is better.")
-    else:
-        print("and the model with only CountVectorizer is better.")
+if p_value < 0.05:
+    mc = MultiComparison(df["Prediction"], df["Model"])
+    results = mc.tukeyhsd()
+    print(results)
 else:
-    print("There is no significant difference.")
+    print("No significant differences between models.")
