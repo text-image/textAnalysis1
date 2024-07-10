@@ -1,5 +1,5 @@
 from sklearn.datasets import load_files
-from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
+from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import accuracy_score
 from sklearn.decomposition import IncrementalPCA
@@ -38,33 +38,33 @@ def predict_in_batches(classifier, x_test, batch_size):
 
 
 # CountVectorizer
-vectorizer = CountVectorizer()
+count_vectorizer = CountVectorizer()
 # model learns the principal components based on the training data distribution
-twenty_train_count_float64 = vectorizer.fit_transform(twenty_train.data)
+twenty_train_count_float64 = count_vectorizer.fit_transform(twenty_train.data)
 # transform is used on the test data to apply the same transformation learned from the training data
-twenty_test_count_float64 = vectorizer.transform(twenty_test.data)
+twenty_test_count_float64 = count_vectorizer.transform(twenty_test.data)
 # Convert to float32
 twenty_train_count = twenty_train_count_float64.astype('float32').toarray()
 twenty_test_count = twenty_test_count_float64.astype('float32').toarray()
 
 # TfidfVectorizer
-transformer = TfidfTransformer()
-twenty_train_idf = transformer.fit_transform(twenty_train_count).astype('float32').toarray()
-twenty_test_idf = transformer.transform(twenty_test_count).astype('float32').toarray()
+idf_vectorizer = TfidfVectorizer()
+twenty_train_idf = idf_vectorizer.fit_transform(twenty_train.data).astype('float32').toarray()
+twenty_test_idf = idf_vectorizer.transform(twenty_test.data).astype('float32').toarray()
 
 # Incremental PCA
 # batch_size to define the number of samples processed at a time
 ipca = IncrementalPCA(n_components=50, batch_size=1000)
-twenty_train_count_pca = ipca.fit_transform(twenty_train_count.toarray())
-twenty_test_count_pca = ipca.transform(twenty_test_count.toarray())
+twenty_train_count_pca = ipca.fit_transform(twenty_train_count)
+twenty_test_count_pca = ipca.transform(twenty_test_count)
 twenty_train_idf_pca = ipca.fit_transform(twenty_train_idf)
 twenty_test_idf_pca = ipca.transform(twenty_test_idf)
 
 
 # LDA
 lda = LDA(n_components=2)
-twenty_train_count_lda = lda.fit_transform(twenty_train_count.toarray(), twenty_train.target)
-twenty_test_count_lda = lda.transform(twenty_test_count.toarray())
+twenty_train_count_lda = lda.fit_transform(twenty_train_count, twenty_train.target)
+twenty_test_count_lda = lda.transform(twenty_test_count)
 twenty_train_idf_lda = lda.fit_transform(twenty_train_idf, twenty_train.target)
 twenty_test_idf_lda = lda.transform(twenty_test_idf)
 
