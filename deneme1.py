@@ -8,6 +8,7 @@ from sklearn.decomposition import IncrementalPCA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 from scipy.stats import f_oneway
 from statsmodels.stats.multicomp import MultiComparison
+import time
 import pandas as pd
 import numpy as np
 import openpyxl
@@ -67,7 +68,9 @@ combinations = [(vec, comp, classify) for vec in vectorizer for comp in compress
 
 # Re-initialize classifier for each combination
 all_results = []
+model_no = 0
 for vec, comp, classify in combinations:
+    start_time = time.time()
     if isinstance(classify, SGDClassifier):
         classifier_instance = SGDClassifier(loss="hinge", penalty="l2", alpha=1e-3, random_state=42, max_iter=5,
                                             tol=None)
@@ -77,6 +80,10 @@ for vec, comp, classify in combinations:
         classifier_instance = SVC(kernel='linear', random_state=42)
 
     result = pre_steps(twenty_news, vec, comp, classifier_instance)
+    end_time = time.time()
+    execution_time = end_time - start_time
+    print(f"Execution time of model {model_no}: {execution_time: .6f} seconds")
+    model_no += 1
     all_results.append(result)
 
 # PREDICT AND EVALUATE
