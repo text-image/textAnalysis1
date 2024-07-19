@@ -68,7 +68,7 @@ combinations = [(vec, comp, classify) for vec in vectorizer for comp in compress
 
 # Re-initialize classifier for each combination
 all_results = []
-model_no = 0
+model_no = 1
 for vec, comp, classify in combinations:
     start_time = time.time()
     if isinstance(classify, SGDClassifier):
