@@ -2,16 +2,14 @@ from sklearn.datasets import load_files
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.linear_model import SGDClassifier, LogisticRegression
 from sklearn.svm import SVC
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
+from sklearn.model_selection import KFold, cross_val_score
 from sklearn.decomposition import IncrementalPCA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
-from scipy.stats import f_oneway
-from statsmodels.stats.multicomp import MultiComparison
+from scipy import stats
 import time
 import pandas as pd
 import numpy as np
-import openpyxl
+import os
 
 categories = ["alt.atheism", "sci.med", "talk.politics.mideast", "rec.motorcycles"]
 twenty_news = load_files(container_path='C:\\20_newsgroups', categories=categories, description=None, load_content=True,
@@ -30,15 +28,9 @@ def fit_in_batches(classifier, x_train, y_train, batch_size):
     return classifier
 
 
-def predict_in_batches(classifier, x_test, batch_size):
-    predictions = []
-    for i in range(0, len(x_test), batch_size):
-        x_batch = x_test[i:i + batch_size]
-        predictions.extend(classifier.predict(x_batch))
-    return np.array(predictions)
-
-
 def pre_steps(data, vectorizer, compressor, classifier):
+    fold_matrix = []
+    kf = KFold(n_splits=5, random_state=42, shuffle=True)
     data_vector = vectorizer.fit_transform(data.data).astype('float32').toarray()
 
     if compressor is not None:
@@ -47,15 +39,18 @@ def pre_steps(data, vectorizer, compressor, classifier):
         else:
             data_vector = compressor.fit_transform(data_vector)
 
-    data_train, data_test, data_train_target, data_test_target = train_test_split(data_vector, data.target,
-                                                                                  test_size=0.2, random_state=42)
+    for i, (train_index, test_index) in enumerate(kf.split(data_vector, data.target)):
+        data_train = data_vector[train_index]
+        data_test = data_vector[test_index]
+        data_train_target = data.target[train_index]
+        data_test_target = data.target[test_index]
+        data_train_target = np.array(data_train_target)
+        data_test_target = np.array(data_test_target)
 
-    data_train_target = np.array(data_train_target)
-    data_test_target = np.array(data_test_target)
+        fitted_classifier = fit_in_batches(classifier, data_train, data_train_target, batch_size=500)
+        fold_matrix.append([data_train, data_test, data_train_target, data_test_target, fitted_classifier])
 
-    fitted_classifier = fit_in_batches(classifier, data_train, data_train_target, batch_size=500)
-
-    return data_train, data_test, data_train_target, data_test_target, fitted_classifier
+    return fold_matrix
 
 
 # Vectorizer and compressor combinations
@@ -68,7 +63,7 @@ combinations = [(vec, comp, classify) for vec in vectorizer for comp in compress
 
 # Re-initialize classifier for each combination
 all_results = []
-model_no = 0
+execution_times = []
 for vec, comp, classify in combinations:
     start_time = time.time()
     if isinstance(classify, SGDClassifier):
@@ -82,64 +77,57 @@ for vec, comp, classify in combinations:
     result = pre_steps(twenty_news, vec, comp, classifier_instance)
     end_time = time.time()
     execution_time = end_time - start_time
-    print(f"Execution time of model {model_no}: {execution_time: .6f} seconds")
-    model_no += 1
+    execution_times.append(execution_time)
+    print(
+        f"Evaluating Model with {vec.__class__.__name__}, {comp.__class__.__name__ if comp else 'None'}, {classify.__class__.__name__}: {execution_time: .6f} seconds")
     all_results.append(result)
 
-# PREDICT AND EVALUATE
-predictions = []
-accuracies = []
-for i, j in enumerate(all_results):
-    data_train, data_test, data_train_target, data_test_target, fitted_classifier = j
-    prediction = predict_in_batches(fitted_classifier, data_test, batch_size=500)
-    predictions.append(prediction)
+# EVALUATE
+all_scores = []
+results = []
 
-    accuracy = accuracy_score(data_test_target, prediction)
-    accuracies.append(accuracy)
-    print(f"Accuracy score of Model {i+1}: {accuracy:.4f}:")
-# for i, prediction in enumerate(predictions):
-#    print(f"Prediction of Classifier {i+1}: {prediction}")
+for i, result in enumerate(all_results):
+    vec, comp, classify = combinations[i]
+    print(
+        f"Evaluating Model {i + 1} with {vec.__class__.__name__}, {comp.__class__.__name__ if comp else 'None'}, {classify.__class__.__name__}:")
+    model_scores = []
+    for j, fold in enumerate(result):
+        data_train, data_test, data_train_target, data_test_target, fitted_classifier = fold
+        fold_scores = cross_val_score(fitted_classifier, data_train, data_train_target, cv=5, scoring='accuracy')
+        model_scores.extend(fold_scores)
+        all_scores.extend(model_scores)
 
-data = []
-for i, j in enumerate(predictions):
-    for i_text, predict in enumerate(j):
-        data.append([i_text, predict, f"Model_{i+1}"])
-# data = [[0, 17, 'Model_1'], [1, 8, 'Model_1'], ...], i=model index, j= predictions of a model
+    mean_score = np.mean(model_scores)
+    confidence_interval = stats.t.interval(0.95, len(model_scores) - 1, loc=mean_score, scale=stats.sem(model_scores))
+    results.append({
+        "Model": f"{vec.__class__.__name__}, {comp.__class__.__name__ if comp else 'None'}, {classify.__class__.__name__}",
+        "Execution Time (s)": execution_times[i],
+        "Cross-Validation Score": np.average(model_scores),
+        "Mean Score": mean_score,
+        "Confidence Interval": confidence_interval
+
+    })
+    print(results)
+#    print(f"Average of the Cross-Validation Scores: {', '.join(f'{np.average(model_scores):.4f}')}")
+
+mean_score = np.mean(all_scores)
+confidence_interval = stats.t.interval(0.95, len(all_scores) - 1, loc=mean_score, scale=stats.sem(all_scores))
+print(f"Mean score: {mean_score}\n%95 Confidence Interval: {confidence_interval}")
 
 # DATA FRAME
-df = pd.DataFrame(data, columns=["Sample", "Prediction", "Model"])
-
-# ANOVA
-# unpack list=> f_oneway(*(groups)) = f_oneway(group1, group2, ...)
-# Check for unique values in each group before performing ANOVA
-unique_values_check = [len(df[df["Model"] == f"Model_{i+1}"]["Prediction"].unique()) > 1 for i in
-                       range(len(predictions))]
-if all(unique_values_check):
-    # Perform ANOVA
-    f_stats, p_value = f_oneway(*(df[df["Model"] == f"Model_{i+1}"]["Prediction"] for i in range(len(predictions))))
-    print(f"ANOVA F-statistic: {f_stats:.4f}, p-value: {p_value:.4f}")
-
-    # Interpret results
-    if p_value < 0.05:
-        mc = MultiComparison(df["Prediction"], df["Model"])
-        results = mc.tukeyhsd()
-        print(results)
-    else:
-        print("No significant differences between models.")
-else:
-    print("ANOVA cannot be performed because one or more models have only one unique prediction.")
+df_results = pd.DataFrame(results)
+data = [["Mean Score", "Confidence Interval"], [mean_score, confidence_interval]]
 
 # EXCEL
-workbook = openpyxl.Workbook()
-sheet = workbook.active
-model_names = []
-for i in range(18):
-    model_names.append(f"Model {i+1}")
-model_names.extend(["f statistics", "p value"])
-# Add data to the Excel sheet
-data = [model_names, accuracies + [f_stats, p_value]]
+df_results.to_excel('model_evaluation.xlsx', index=False)
+print("'model_evaluation.xlsx' is created.")
 
-for row in data:
-    sheet.append(row)
-workbook.save("sheet.xlsx")
-print("Excel file is created.")
+# ADD NEW DATA
+file_name = 'model_evaluation.xlsx'
+
+if os.path.exists(file_name):
+    existing_df = pd.read_excel(file_name)
+    df_results = pd.concat([existing_df, df_results], ignore_index=True)
+
+df_results.to_excel(file_name, index=False)
+print("'model_evaluation.xlsx' is updated.")
