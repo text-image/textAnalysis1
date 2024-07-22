@@ -35,6 +35,9 @@ def pre_steps(data, vectorizer, compressor, classifier):
 
     if compressor is not None:
         if isinstance(compressor, LDA):
+            max_components = min(data_vector.shape[1], len(np.unique(data.target)) - 1)
+            compressor.n_components = min(compressor.n_components, max_components)
+            data_vector = compressor.fit_transform(data_vector, data.target)
             data_vector = compressor.fit_transform(data_vector, data.target)
         else:
             data_vector = compressor.fit_transform(data_vector)
